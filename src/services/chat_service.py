@@ -71,7 +71,30 @@ class ChatService:
             thread_pool, lambda: chat_table.put_item(Item=message_data)
         )
 
-    def mark_session_as_completed(self, session_id: str):
+    def mark_session_as_limited(self, sender_id: str, user_limited_until: str):
+        """
+        Mark a user's session as limited in DynamoDB.
+        """
+        session_table.update_item(
+            Key={"sender_id": sender_id},
+            UpdateExpression="SET #user_limited_until = :user_limited_until, updated_at = :updated_at",
+            ExpressionAttributeNames={"#user_limited_until": "user_limited_until"},
+            ExpressionAttributeValues={
+                ":user_limited_until": user_limited_until,
+                ":updated_at": int(time.time()),
+            },
+            ReturnValues="ALL_NEW",
+        )
+
+        logger.info(
+            "Session marked as limited",
+            sender_id=sender_id,
+            user_limited_until=user_limited_until,
+        )
+
+    def mark_session_as_completed(
+        self, sender_id: str, session_id: str, reopen_session: bool = False
+    ):
         """
         Mark a user's session as completed in DynamoDB.
 
@@ -79,7 +102,21 @@ class ChatService:
             session_id: The ID of the session to mark as completed
         """
         try:
-            response = session_table.update_item(
+            if reopen_session:
+                new_session_id = str(uuid.uuid4())
+
+                session_table.put_item(
+                    Item={
+                        "session_id": new_session_id,
+                        "sender_id": sender_id,
+                        "status": "active",
+                        "created_at": int(time.time()),
+                    }
+                )
+                session_id = new_session_id
+                return
+
+            session_table.update_item(
                 Key={"session_id": session_id},
                 UpdateExpression="SET #status = :status, updated_at = :updated_at",
                 ExpressionAttributeNames={
@@ -219,11 +256,16 @@ class ChatService:
 
         reply = result.get("reply", "")
         is_feedback_session_complete = result.get("is_feedback_session_complete", False)
+        should_persist_reply = result.get("should_persist_reply", True)
+        user_limited_until = result.get("user_limited_until", None)
 
         if is_feedback_session_complete:
-            self.mark_session_as_completed(conversation["session_id"])
+            self.mark_session_as_completed(sender_id, conversation["session_id"])
 
-        return reply, conversation["session_id"]
+        if user_limited_until:
+            self.mark_session_as_limited(sender_id, user_limited_until)
+
+        return reply, conversation["session_id"], should_persist_reply
 
     async def reply_user(self, sender_id: str) -> Dict[str, str]:
         """
@@ -242,7 +284,11 @@ class ChatService:
         try:
             receiver_id = f"+{sender_id}"
 
-            reply_message, session_id = await self.get_reply_message(sender_id)
+            (
+                reply_message,
+                session_id,
+                should_persist_reply,
+            ) = await self.get_reply_message(sender_id)
 
             # Format WhatsApp numbers
             from_number = (
@@ -275,10 +321,16 @@ class ChatService:
                 from_number, to_number, reply_message
             )
 
-            save_task = self.save_chat_message(chat_data)
+            if should_persist_reply:
+                save_task = self.save_chat_message(chat_data)
+            else:
+                save_task = None
 
-            # Wait for both operations to complete
-            await asyncio.gather(whatsapp_task, save_task, return_exceptions=True)
+            tasks = [whatsapp_task]
+            if save_task is not None:
+                tasks.append(save_task)
+
+            await asyncio.gather(*tasks, return_exceptions=True)
 
         except Exception as e:
             logger.error(
