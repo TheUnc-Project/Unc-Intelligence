@@ -282,16 +282,6 @@ jobs:
               ps aux | grep uvicorn
               echo "2. Port Information:"
               sudo netstat -tlpn
-              echo "3. Systemd Status:"
-              sudo systemctl status unc-intelligence
-              echo "4. Systemd Logs:"
-              sudo journalctl -u unc-intelligence -n 50 --no-pager
-              echo "5. Nginx Error Logs:"
-              sudo tail -n 50 /var/log/nginx/error.log
-              echo "6. Nginx Access Logs:"
-              sudo tail -n 50 /var/log/nginx/access.log
-              echo "7. Application Logs:"
-              sudo tail -n 50 /opt/unc-intelligence/logs/app.log
               exit 1
             fi
 
