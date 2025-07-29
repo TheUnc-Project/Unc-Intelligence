@@ -96,14 +96,18 @@ jobs:
           sudo chown -R ubuntu:ubuntu /opt/unc-intelligence
           cd /opt/unc-intelligence
 
-          if [ -d ".git" ]; then
-            git pull origin main
-          else
+          # Remove existing directory contents if not a git repo
+          if [ ! -d ".git" ]; then
+            rm -rf ./* ./.* 2>/dev/null || true
             git clone https://github.com/${{ github.repository }}.git .
             python3 -m venv venv
+          else
+            git fetch origin main
+            git reset --hard origin/main
           fi
 
           source venv/bin/activate
+          pip install --upgrade pip
           pip install -r requirements.txt
 
           # Create service file with logging configuration
@@ -194,12 +198,18 @@ jobs:
           sudo rm -f /etc/nginx/sites-enabled/default
           sudo systemctl restart nginx
 
-          sudo certbot --nginx \
-            --non-interactive \
-            --agree-tos \
-            --email "${EMAIL}" \
-            --domains "${DOMAIN}" \
-            --redirect
+          # Check if certificate already exists and is valid
+          if [ ! -d "/etc/letsencrypt/live/${DOMAIN}" ] || ! sudo certbot certificates | grep -q "${DOMAIN}"; then
+            echo "No valid certificate found. Running certbot..."
+            sudo certbot --nginx \
+              --non-interactive \
+              --agree-tos \
+              --email "${EMAIL}" \
+              --domains "${DOMAIN}" \
+              --redirect
+          else
+            echo "Valid certificate already exists for ${DOMAIN}. Skipping certbot."
+          fi
 
           sudo systemctl daemon-reload
           sudo systemctl enable unc-intelligence
