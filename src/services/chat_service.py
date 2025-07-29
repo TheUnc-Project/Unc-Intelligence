@@ -8,7 +8,7 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 # Initialize DynamoDB resources
-dynamodb = boto3.resource("dynamodb")
+dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
 session_table = dynamodb.Table("sessions")
 chat_table = dynamodb.Table("chats")
 
