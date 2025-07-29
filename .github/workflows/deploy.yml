@@ -198,9 +198,9 @@ jobs:
           sudo rm -f /etc/nginx/sites-enabled/default
           sudo systemctl restart nginx
 
-          # Check if certificate already exists and is valid
-          if [ ! -d "/etc/letsencrypt/live/${DOMAIN}" ] || ! sudo certbot certificates | grep -q "${DOMAIN}"; then
-            echo "No valid certificate found. Running certbot..."
+          # Check if SSL is already configured in nginx
+          if ! grep -q "ssl_certificate" "/etc/nginx/sites-enabled/unc-intelligence"; then
+            echo "No SSL configuration found. Running certbot..."
             sudo certbot --nginx \
               --non-interactive \
               --agree-tos \
@@ -208,7 +208,7 @@ jobs:
               --domains "${DOMAIN}" \
               --redirect
           else
-            echo "Valid certificate already exists for ${DOMAIN}. Skipping certbot."
+            echo "SSL already configured for ${DOMAIN}. Skipping certbot."
           fi
 
           sudo systemctl daemon-reload
