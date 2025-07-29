@@ -92,11 +92,9 @@ class ChatService:
                 ReturnValues="ALL_NEW",
             )
 
-            updated_session = response.get("Attributes", {})
             logger.info(
                 "Session marked as completed",
                 session_id=session_id,
-                updated_session=updated_session,
             )
 
         except Exception as e:
