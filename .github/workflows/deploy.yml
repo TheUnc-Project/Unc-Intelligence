@@ -110,8 +110,12 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+          # Get number of CPU cores and calculate workers
+          echo "Calculating optimal number of workers..."
+          WORKER_COUNT=$(nproc)
+
           # Create service file with logging configuration
-          sudo bash -c 'cat > /etc/systemd/system/unc-intelligence.service' << 'EOF'
+          sudo bash -c "cat > /etc/systemd/system/unc-intelligence.service" << EOF
           [Unit]
           Description=Unc Intelligence FastAPI Application
           After=network.target
@@ -122,10 +126,11 @@ jobs:
           WorkingDirectory=/opt/unc-intelligence
           Environment="PATH=/opt/unc-intelligence/venv/bin"
           Environment="PYTHONPATH=/opt/unc-intelligence"
-          ExecStart=/opt/unc-intelligence/venv/bin/uvicorn app:app \
+          ExecStart=/opt/unc-intelligence/venv/bin/uvicorn \
+            app:app \
             --host 0.0.0.0 \
             --port 8000 \
-            --workers $(nproc) \
+            --workers ${WORKER_COUNT} \
             --log-config /opt/unc-intelligence/log_config.json
           Restart=always
           RestartSec=5
