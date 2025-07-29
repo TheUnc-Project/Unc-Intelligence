@@ -167,7 +167,7 @@ jobs:
 
           sudo bash -c "cat > /etc/nginx/sites-available/unc-intelligence" << EOF
           server {
-              server_name \$DOMAIN;
+              server_name ${DOMAIN};
 
               location / {
                   proxy_pass http://localhost:8000;
@@ -197,8 +197,8 @@ jobs:
           sudo certbot --nginx \
             --non-interactive \
             --agree-tos \
-            --email "\$EMAIL" \
-            --domains "\$DOMAIN" \
+            --email "${EMAIL}" \
+            --domains "${DOMAIN}" \
             --redirect
 
           sudo systemctl daemon-reload
