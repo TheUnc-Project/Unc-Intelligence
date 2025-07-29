@@ -227,7 +227,7 @@ class ChatService:
 
         return reply, conversation["session_id"]
 
-    async def reply_user(self, sender_id: str, message: str) -> Dict[str, str]:
+    async def reply_user(self, sender_id: str) -> Dict[str, str]:
         """
         Send a WhatsApp reply to a user.
 
