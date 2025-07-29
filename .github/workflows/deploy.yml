@@ -244,31 +244,18 @@ jobs:
               sudo apt-get install -y net-tools
           fi
 
-          # Verify service is running and accepting connections
-          echo "Waiting for service to start..."
-          for i in {1..10}; do
-            echo "Attempt $i/10:"
-            
-            # Check if port 8000 is being listened on
-            echo "1. Checking port 8000..."
-            if ! sudo netstat -tlpn | grep -q ":8000"; then
-              echo "No process is listening on port 8000!"
-              echo "Current listening ports:"
-              sudo netstat -tlpn
-              sleep 2
-              continue
-            fi
-            echo "Port 8000 is being listened on"
-
-            echo "Waiting 2 seconds before next attempt..."
-            sleep 2
-          done
-
           # Only restart nginx if the backend is confirmed running
           echo "Restarting nginx..."
           sudo systemctl restart nginx
+
+          # Show service status after restart
+          echo "Checking unc-intelligence service status..."
+          sudo systemctl status unc-intelligence --no-pager || true
+          echo "Recent service logs:"
+          sudo journalctl -u unc-intelligence -n 50 --no-pager || true
+
           echo "Testing nginx proxy to backend..."
-          NGINX_RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost/health)
+          NGINX_RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost/health/)
           NGINX_HTTP_CODE=$(echo "$NGINX_RESPONSE" | tail -n1)
           NGINX_BODY=$(echo "$NGINX_RESPONSE" | head -n1)
           echo "Nginx proxy test result: $NGINX_HTTP_CODE"
