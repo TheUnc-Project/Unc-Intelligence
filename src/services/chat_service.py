@@ -46,10 +46,12 @@ class ChatService:
         Fetch the active session and its unresolved inbound messages for a user.
         """
         try:
-            # Get the active session
+            # Get the active session using SenderSessionsIndex
             session_response = session_table.query(
+                IndexName="SenderSessionsIndex",
                 KeyConditionExpression=Key("sender_id").eq(sender_id),
                 FilterExpression=Attr("status").eq("active"),
+                ScanIndexForward=False,  # Get most recent first
                 Limit=1,
             )
             sessions = session_response.get("Items", [])
@@ -60,18 +62,16 @@ class ChatService:
             active_session = sessions[0]
             session_id = active_session["session_id"]
 
-            # Get all inbound messages for the session
+            # Get all inbound messages for the session using SessionIndex
             messages = []
             last_key = None
 
             while True:
                 query = {
-                    "KeyConditionExpression": Key("sender_id").eq(sender_id),
-                    "FilterExpression": (
-                        Attr("chat_type").eq("inbound")
-                        & Attr("session_id").eq(session_id)
-                    ),
-                    "ScanIndexForward": True,
+                    "IndexName": "SessionIndex",
+                    "KeyConditionExpression": Key("session_id").eq(session_id),
+                    "FilterExpression": Attr("chat_type").eq("inbound"),
+                    "ScanIndexForward": True,  # Get messages in chronological order
                 }
                 if last_key:
                     query["ExclusiveStartKey"] = last_key
