@@ -23,4 +23,4 @@ async def reply_user(request: ReplyRequest):
         return {"message": "Reply sent successfully."}
     except Exception as e:
         logging.error(f"An error occurred: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An error occurred")

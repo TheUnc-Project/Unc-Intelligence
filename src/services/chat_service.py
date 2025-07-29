@@ -4,6 +4,10 @@ from fastapi import HTTPException
 import boto3
 from boto3.dynamodb.conditions import Key, Attr
 from src.utils.logger import get_logger
+import uuid
+import time
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 logger = get_logger(__name__)
 
@@ -11,6 +15,9 @@ logger = get_logger(__name__)
 dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
 session_table = dynamodb.Table("sessions")
 chat_table = dynamodb.Table("chats")
+
+# Thread pool for async operations
+thread_pool = ThreadPoolExecutor(max_workers=10)
 
 
 class ChatService:
@@ -35,6 +42,25 @@ class ChatService:
 
         self.client = Client(self.account_sid, self.auth_token)
 
+    async def send_whatsapp_message(
+        self, from_number: str, to_number: str, reply_message: str
+    ) -> Dict[str, str]:
+        """Send WhatsApp message using Twilio in a separate thread."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            thread_pool,
+            lambda: self.client.messages.create(
+                from_=from_number, body=reply_message, to=to_number
+            ),
+        )
+
+    async def save_chat_message(self, message_data: Dict[str, Any]):
+        """Save chat message to DynamoDB in a separate thread."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            thread_pool, lambda: chat_table.put_item(Item=message_data)
+        )
+
     def mark_session_as_completed(self, sender_id):
         """Mark a user's session as completed."""
         pass
@@ -43,7 +69,7 @@ class ChatService:
         self, sender_id: str
     ) -> Optional[Dict[str, Any]]:
         """
-        Fetch the active session and its unresolved inbound messages for a user.
+        Fetch the active session and all its messages (both inbound and outbound).
         """
         try:
             # Get the active session using SenderSessionsIndex
@@ -62,7 +88,7 @@ class ChatService:
             active_session = sessions[0]
             session_id = active_session["session_id"]
 
-            # Get all inbound messages for the session using SessionIndex
+            # Get all messages for the session using SessionIndex
             messages = []
             last_key = None
 
@@ -70,7 +96,6 @@ class ChatService:
                 query = {
                     "IndexName": "SessionIndex",
                     "KeyConditionExpression": Key("session_id").eq(session_id),
-                    "FilterExpression": Attr("chat_type").eq("inbound"),
                     "ScanIndexForward": True,  # Get messages in chronological order
                 }
                 if last_key:
@@ -84,7 +109,7 @@ class ChatService:
 
             if not messages:
                 logger.info(
-                    "No inbound messages for session",
+                    "No messages for session",
                     sender_id=sender_id,
                     session_id=session_id,
                 )
@@ -94,10 +119,22 @@ class ChatService:
             transformed = []
             for msg in messages:
                 content = msg.get("content", {})
+                direction = (
+                    "inbound" if msg.get("chat_type") == "inbound" else "outbound"
+                )
+
                 if text := content.get("text"):
-                    transformed.append({"type": "text", "text": text})
+                    transformed.append(
+                        {"type": "text", "text": text, "direction": direction}
+                    )
                 for media in content.get("media_items", []):
-                    transformed.append({"type": "media", "url": media.get("url")})
+                    transformed.append(
+                        {
+                            "type": "media",
+                            "url": media.get("url"),
+                            "direction": direction,
+                        }
+                    )
 
             logger.info(
                 "User session messages retrieved",
@@ -106,7 +143,7 @@ class ChatService:
                 session_id=session_id,
             )
 
-            return {"messages": transformed}
+            return {"messages": transformed, "session_id": session_id}
 
         except Exception as e:
             logger.error(
@@ -120,7 +157,7 @@ class ChatService:
         """Get the reply message for a user's message."""
         return message
 
-    def reply_user(self, sender_id: str, message: str) -> Dict[str, str]:
+    async def reply_user(self, sender_id: str, message: str) -> Dict[str, str]:
         """
         Send a WhatsApp reply to a user.
 
@@ -134,48 +171,66 @@ class ChatService:
         Raises:
             HTTPException: If message sending fails
         """
-        receiver_id = f"+{sender_id}"
-
-        user_unresolved_session_message = self.get_user_unresolved_session_message(
-            sender_id
-        )
-
-        logger.info(
-            "User unresolved session message",
-            user_unresolved_session_message=user_unresolved_session_message,
-        )
-
-        reply_message = self.get_reply_message(sender_id, message)
-
-        # Format WhatsApp numbers
-        from_number = (
-            self.from_number
-            if self.from_number.startswith("whatsapp:")
-            else f"whatsapp:{self.from_number}"
-        )
-        to_number = (
-            receiver_id
-            if receiver_id.startswith("whatsapp:")
-            else f"whatsapp:{receiver_id}"
-        )
-
         try:
-            message = self.client.messages.create(
-                from_=from_number, body=reply_message, to=to_number
+            receiver_id = f"+{sender_id}"
+
+            user_unresolved_session_message = self.get_user_unresolved_session_message(
+                sender_id
             )
 
-            logger.info("WhatsApp message sent", message_sid=message.sid, to=to_number)
+            logger.info(
+                "User unresolved session message",
+                user_unresolved_session_message=user_unresolved_session_message,
+            )
 
-            return {
-                "to": to_number,
-                "message_sid": message.sid,
-                "status": message.status,
+            reply_message = self.get_reply_message(sender_id, message)
+
+            # Format WhatsApp numbers
+            from_number = (
+                self.from_number
+                if self.from_number.startswith("whatsapp:")
+                else f"whatsapp:{self.from_number}"
+            )
+            to_number = (
+                receiver_id
+                if receiver_id.startswith("whatsapp:")
+                else f"whatsapp:{receiver_id}"
+            )
+
+            # Generate message_id
+            message_id = str(uuid.uuid4())
+            timestamp = int(time.time())
+
+            # Prepare chat message data
+            chat_data = {
+                "sender_id": sender_id,
+                "message_id": message_id,
+                "chat_type": "outbound",
+                "session_id": user_unresolved_session_message["session_id"],
+                "created_at": timestamp,
+                "content": {"text": reply_message, "media_count": 0, "segments": 1},
+                "metadata": {"message_id": message_id, "status": "sent"},
             }
+
+            # Run Twilio call and DynamoDB save in parallel
+            whatsapp_task = self.send_whatsapp_message(
+                from_number, to_number, reply_message
+            )
+            save_task = self.save_chat_message(chat_data)
+
+            # Wait for both operations to complete
+            whatsapp_result, _ = await asyncio.gather(
+                whatsapp_task, save_task, return_exceptions=True
+            )
+
+            logger.info(
+                "WhatsApp message sent and saved",
+                message_id=message_id,
+                twilio_sid=whatsapp_result.sid,
+                to=to_number,
+            )
 
         except Exception as e:
             logger.error(
                 "Failed to send WhatsApp message", error=str(e), receiver_id=receiver_id
-            )
-            raise HTTPException(
-                status_code=500, detail=f"Failed to send message: {str(e)}"
             )
