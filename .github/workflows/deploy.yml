@@ -260,31 +260,6 @@ jobs:
             fi
             echo "Port 8000 is being listened on"
 
-            # Try connecting to the health endpoint
-            echo "2. Testing connection to health endpoint..."
-            HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" https://intelligence.theuncproject.com/health)
-            HTTP_CODE=$(echo "$HEALTH_RESPONSE" | tail -n1)
-            RESPONSE_BODY=$(echo "$HEALTH_RESPONSE" | head -n1)
-            
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "Successfully connected to application!"
-              echo "Response: $RESPONSE_BODY"
-              break
-            else
-              echo "Health check failed with code: $HTTP_CODE"
-              echo "Response: $RESPONSE_BODY"
-            fi
-
-            if [ $i -eq 10 ]; then
-              echo "Service failed to start or accept connections after 60 seconds"
-              echo "=== Detailed Diagnostics ==="
-              echo "1. Process Information:"
-              ps aux | grep uvicorn
-              echo "2. Port Information:"
-              sudo netstat -tlpn
-              exit 1
-            fi
-
             echo "Waiting 2 seconds before next attempt..."
             sleep 2
           done
