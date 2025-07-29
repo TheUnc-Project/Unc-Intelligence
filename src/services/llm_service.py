@@ -65,6 +65,7 @@ Additional Rules:
 - If feedback is missing, reply must request the user's feedback.
 - Only prompt for media if both product name and feedback are already present.
 - Do not thank the user until all required information is complete.
+- if any media was provided after the product name and feedback, assume that the user has confirmed the media availability and user has provided the media needed
 - If the conversation is not feedback-based, reply must politely guide the user to start by providing the product name.
 - Return only a valid JSON object as output. No extra text, explanations, or formatting.
         """.strip()
