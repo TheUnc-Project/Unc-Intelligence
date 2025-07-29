@@ -37,7 +37,6 @@ def get_aws_secrets():
             "TWILIO_AUTH_TOKEN": get_secret("TWILIO_AUTH_TOKEN"),
             "TWILIO_WHATSAPP_FROM": get_secret("TWILIO_WHATSAPP_FROM"),
         }
-        logger.info("aws_config here", aws_config=aws_config)
         logger.info("Successfully loaded configuration from AWS Secrets Manager")
         return aws_config
 

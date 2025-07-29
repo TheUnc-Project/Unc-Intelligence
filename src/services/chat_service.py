@@ -28,12 +28,12 @@ class ChatService:
     def mark_session_as_completed(self, sender_id):
         pass
 
-    def get_reply_message(self, sender_id):
-        return "Hello, how are you?"
+    def get_reply_message(self, sender_id, message):
+        return message
 
-    def reply_user(self, sender_id):
+    def reply_user(self, sender_id, message):
         receiver_id = f"+{sender_id}"
-        reply_message = self.get_reply_message(sender_id)
+        reply_message = self.get_reply_message(sender_id, message)
 
         client = self.client
 
