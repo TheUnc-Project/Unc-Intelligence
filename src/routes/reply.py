@@ -8,10 +8,12 @@ router.services = {}
 
 logging.basicConfig(level=logging.INFO)
 
+
 # Define a model for the request body
 class ReplyRequest(BaseModel):
     sender_id: str
     message: str
+
 
 @router.post("/")
 async def reply_user(request: ReplyRequest):

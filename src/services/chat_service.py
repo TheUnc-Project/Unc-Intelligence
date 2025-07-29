@@ -1,6 +1,5 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from twilio.rest import Client
-from fastapi import HTTPException
 import boto3
 from boto3.dynamodb.conditions import Key, Attr
 from src.utils.logger import get_logger
@@ -8,6 +7,7 @@ import uuid
 import time
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from src.services.llm_service import LLM
 
 logger = get_logger(__name__)
 
@@ -41,18 +41,28 @@ class ChatService:
             )
 
         self.client = Client(self.account_sid, self.auth_token)
+        self.llm = LLM(config)
 
     async def send_whatsapp_message(
         self, from_number: str, to_number: str, reply_message: str
-    ) -> Dict[str, str]:
+    ):
         """Send WhatsApp message using Twilio in a separate thread."""
+        
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
+        task = await loop.run_in_executor(
             thread_pool,
             lambda: self.client.messages.create(
                 from_=from_number, body=reply_message, to=to_number
             ),
         )
+        
+        logger.info(
+            "WhatsApp message sent",
+            from_number=from_number,
+            to_number=to_number,
+            reply_message=reply_message,
+        )
+        return task
 
     async def save_chat_message(self, message_data: Dict[str, Any]):
         """Save chat message to DynamoDB in a separate thread."""
@@ -60,10 +70,43 @@ class ChatService:
         return await loop.run_in_executor(
             thread_pool, lambda: chat_table.put_item(Item=message_data)
         )
+        
 
-    def mark_session_as_completed(self, sender_id):
-        """Mark a user's session as completed."""
-        pass
+    def mark_session_as_completed(self, session_id: str):
+        """
+        Mark a user's session as completed in DynamoDB.
+
+        Args:
+            session_id: The ID of the session to mark as completed
+        """
+        try:
+            response = session_table.update_item(
+                Key={"session_id": session_id},
+                UpdateExpression="SET #status = :status, updated_at = :updated_at",
+                ExpressionAttributeNames={
+                    "#status": "status"  # status is a reserved word in DynamoDB
+                },
+                ExpressionAttributeValues={
+                    ":status": "completed",
+                    ":updated_at": int(time.time()),
+                },
+                ReturnValues="ALL_NEW",
+            )
+
+            updated_session = response.get("Attributes", {})
+            logger.info(
+                "Session marked as completed",
+                session_id=session_id,
+                updated_session=updated_session,
+            )
+
+        except Exception as e:
+            logger.error(
+                "Failed to mark session as completed",
+                error=str(e),
+                session_id=session_id,
+            )
+            raise
 
     def get_user_unresolved_session_message(
         self, sender_id: str
@@ -153,9 +196,36 @@ class ChatService:
             )
             raise
 
-    def get_reply_message(self, sender_id: str, message: str) -> str:
-        """Get the reply message for a user's message."""
-        return message
+    async def get_reply_message(self, sender_id: str) -> Tuple[str, str]:
+        """
+        Get the reply message for a user's message and the session id
+
+        Args:
+            sender_id: The user's ID
+
+        Returns:
+            str: The generated reply message
+            str: The session id
+        """
+
+        conversation = self.get_user_unresolved_session_message(sender_id)
+
+        logger.info(
+            "User conversation used for reply",
+            conversation=conversation,
+        )
+
+        if not conversation:
+            conversation = {"messages": []}
+
+        reply, is_feedback_session_complete = await self.llm.get_reply_message(
+            messages=conversation["messages"]
+        )
+
+        if is_feedback_session_complete:
+            self.mark_session_as_completed(conversation["session_id"])
+
+        return reply, conversation["session_id"]
 
     async def reply_user(self, sender_id: str, message: str) -> Dict[str, str]:
         """
@@ -174,16 +244,7 @@ class ChatService:
         try:
             receiver_id = f"+{sender_id}"
 
-            user_unresolved_session_message = self.get_user_unresolved_session_message(
-                sender_id
-            )
-
-            logger.info(
-                "User unresolved session message",
-                user_unresolved_session_message=user_unresolved_session_message,
-            )
-
-            reply_message = self.get_reply_message(sender_id, message)
+            reply_message, session_id = await self.get_reply_message(sender_id)
 
             # Format WhatsApp numbers
             from_number = (
@@ -206,29 +267,20 @@ class ChatService:
                 "sender_id": sender_id,
                 "message_id": message_id,
                 "chat_type": "outbound",
-                "session_id": user_unresolved_session_message["session_id"],
+                "session_id": session_id,
                 "created_at": timestamp,
                 "content": {"text": reply_message, "media_count": 0, "segments": 1},
                 "metadata": {"message_id": message_id, "status": "sent"},
             }
 
-            # Run Twilio call and DynamoDB save in parallel
             whatsapp_task = self.send_whatsapp_message(
                 from_number, to_number, reply_message
             )
+
             save_task = self.save_chat_message(chat_data)
 
             # Wait for both operations to complete
-            whatsapp_result, _ = await asyncio.gather(
-                whatsapp_task, save_task, return_exceptions=True
-            )
-
-            logger.info(
-                "WhatsApp message sent and saved",
-                message_id=message_id,
-                twilio_sid=whatsapp_result.sid,
-                to=to_number,
-            )
+            await asyncio.gather(whatsapp_task, save_task, return_exceptions=True)
 
         except Exception as e:
             logger.error(
