@@ -218,7 +218,7 @@ class ChatService:
         if not conversation:
             conversation = {"messages": []}
 
-        reply, is_feedback_session_complete = await self.llm.get_reply_message(
+        reply, is_feedback_session_complete = await self.llm.analyze_conversation(
             messages=conversation["messages"]
         )
 

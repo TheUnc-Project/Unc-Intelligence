@@ -1,5 +1,4 @@
 import json
-import asyncio
 from typing import List, Dict, Any
 from openai import AsyncOpenAI
 from src.utils.logger import get_logger
@@ -88,7 +87,7 @@ Additional Rules:
                 output.append(f"{msg['direction'].capitalize()}: [Media] {msg['url']}")
         return "\n".join(output)
 
-    async def analyze_feedback(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def analyze_conversation(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Analyze a WhatsApp conversation and return extracted feedback details.
 
