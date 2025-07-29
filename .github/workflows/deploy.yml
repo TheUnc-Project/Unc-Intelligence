@@ -189,6 +189,24 @@ jobs:
                   proxy_set_header X-Real-IP \$remote_addr;
                   proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                   proxy_set_header X-Forwarded-Proto \$scheme;
+
+                  # Add timeout and retry settings
+                  proxy_connect_timeout 60s;
+                  proxy_send_timeout 60s;
+                  proxy_read_timeout 60s;
+                  proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
+                  proxy_next_upstream_tries 3;
+                  proxy_next_upstream_timeout 10s;
+
+                  # Return 503 after all retries fail
+                  error_page 502 503 504 /error.html;
+              }
+
+              # Custom error page
+              location = /error.html {
+                  internal;
+                  return 503 '{"error": "Service temporarily unavailable. Please try again later."}';
+                  default_type application/json;
               }
 
               add_header X-Frame-Options "SAMEORIGIN" always;
@@ -221,15 +239,85 @@ jobs:
           sudo systemctl enable unc-intelligence
           sudo systemctl restart unc-intelligence
 
-          # Verify service is running
-          echo "Waiting for service to start..."
-          sleep 5  # Give it a moment to start
-          if ! sudo systemctl is-active --quiet unc-intelligence; then
-            echo "Service failed to start. Checking logs..."
-            sudo journalctl -u unc-intelligence -n 50 --no-pager
-            exit 1
+          # Install netstat if not available
+          if ! command -v netstat &> /dev/null; then
+              sudo apt-get install -y net-tools
           fi
-          echo "Service started successfully"
+
+          # Verify service is running and accepting connections
+          echo "Waiting for service to start..."
+          for i in {1..30}; do
+            echo "Attempt $i/30:"
+            
+            # Check systemd service status
+            echo "1. Checking service status..."
+            if ! sudo systemctl is-active --quiet unc-intelligence; then
+              echo "Service is not running!"
+              sudo systemctl status unc-intelligence
+              sleep 2
+              continue
+            fi
+            echo "Service is running"
+
+            # Check if port 8000 is being listened on
+            echo "2. Checking port 8000..."
+            if ! sudo netstat -tlpn | grep -q ":8000"; then
+              echo "No process is listening on port 8000!"
+              echo "Current listening ports:"
+              sudo netstat -tlpn
+              sleep 2
+              continue
+            fi
+            echo "Port 8000 is being listened on"
+
+            # Try connecting to the health endpoint
+            echo "3. Testing connection to health endpoint..."
+            HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost:8000/health)
+            HTTP_CODE=$(echo "$HEALTH_RESPONSE" | tail -n1)
+            RESPONSE_BODY=$(echo "$HEALTH_RESPONSE" | head -n1)
+            
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "Successfully connected to application!"
+              echo "Response: $RESPONSE_BODY"
+              break
+            else
+              echo "Health check failed with code: $HTTP_CODE"
+              echo "Response: $RESPONSE_BODY"
+            fi
+
+            if [ $i -eq 30 ]; then
+              echo "Service failed to start or accept connections after 60 seconds"
+              echo "=== Detailed Diagnostics ==="
+              echo "1. Process Information:"
+              ps aux | grep uvicorn
+              echo "2. Port Information:"
+              sudo netstat -tlpn
+              echo "3. Systemd Status:"
+              sudo systemctl status unc-intelligence
+              echo "4. Systemd Logs:"
+              sudo journalctl -u unc-intelligence -n 50 --no-pager
+              echo "5. Nginx Error Logs:"
+              sudo tail -n 50 /var/log/nginx/error.log
+              echo "6. Nginx Access Logs:"
+              sudo tail -n 50 /var/log/nginx/access.log
+              echo "7. Application Logs:"
+              sudo tail -n 50 /opt/unc-intelligence/logs/app.log
+              exit 1
+            fi
+
+            echo "Waiting 2 seconds before next attempt..."
+            sleep 2
+          done
+
+          # Only restart nginx if the backend is confirmed running
+          echo "Restarting nginx..."
+          sudo systemctl restart nginx
+          echo "Testing nginx proxy to backend..."
+          NGINX_RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost/health)
+          NGINX_HTTP_CODE=$(echo "$NGINX_RESPONSE" | tail -n1)
+          NGINX_BODY=$(echo "$NGINX_RESPONSE" | head -n1)
+          echo "Nginx proxy test result: $NGINX_HTTP_CODE"
+          echo "Response: $NGINX_BODY"
 
           sudo systemctl enable certbot.timer
           sudo systemctl start certbot.timer

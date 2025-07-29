@@ -32,11 +32,12 @@ def get_aws_secrets():
         # Get all secrets
         aws_config = {
             "OPENAI_API_KEY": get_secret("OPENAI_API_KEY"),
-            "INTELLIGENCE_API_SCERET": get_secret("INTELLIGENCE_API_SCERET"),
+            "INTELLIGENCE_API_SECRET": get_secret("INTELLIGENCE_API_SECRET"),
             "TWILIO_ACCOUNT_SID": get_secret("TWILIO_ACCOUNT_SID"),
             "TWILIO_AUTH_TOKEN": get_secret("TWILIO_AUTH_TOKEN"),
             "TWILIO_WHATSAPP_FROM": get_secret("TWILIO_WHATSAPP_FROM"),
         }
+        logger.info("aws_config here", aws_config=aws_config)
         logger.info("Successfully loaded configuration from AWS Secrets Manager")
         return aws_config
 
