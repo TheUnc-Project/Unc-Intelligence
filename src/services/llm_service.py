@@ -180,9 +180,12 @@ Your task is to analyze the entire conversation and return a single JSON object 
                     datetime.datetime.now() + datetime.timedelta(minutes=2)
                 ).isoformat()
 
+                return result
+
             if result.get("is_too_short", False):
                 result["should_persist_reply"] = False
                 result["reply"] = "Your message is too short."
+                return result
 
             return result
 

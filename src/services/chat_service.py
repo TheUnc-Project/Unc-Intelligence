@@ -71,12 +71,14 @@ class ChatService:
             thread_pool, lambda: chat_table.put_item(Item=message_data)
         )
 
-    def mark_session_as_limited(self, sender_id: str, user_limited_until: str):
+    def mark_session_as_limited(
+        self, session_id: str, user_limited_until: str
+    ):
         """
         Mark a user's session as limited in DynamoDB.
         """
         session_table.update_item(
-            Key={"sender_id": sender_id},
+            Key={"session_id": session_id},
             UpdateExpression="SET #user_limited_until = :user_limited_until, updated_at = :updated_at",
             ExpressionAttributeNames={"#user_limited_until": "user_limited_until"},
             ExpressionAttributeValues={
@@ -88,7 +90,7 @@ class ChatService:
 
         logger.info(
             "Session marked as limited",
-            sender_id=sender_id,
+            session_id=session_id,
             user_limited_until=user_limited_until,
         )
 
@@ -243,6 +245,7 @@ class ChatService:
         """
 
         conversation = self.get_user_unresolved_session_message(sender_id)
+        session_id = conversation["session_id"]
 
         logger.info(
             "User conversation used for reply",
@@ -263,9 +266,9 @@ class ChatService:
             self.mark_session_as_completed(sender_id, conversation["session_id"])
 
         if user_limited_until:
-            self.mark_session_as_limited(sender_id, user_limited_until)
+            self.mark_session_as_limited(session_id, user_limited_until)
 
-        return reply, conversation["session_id"], should_persist_reply
+        return reply, session_id, should_persist_reply
 
     async def reply_user(self, sender_id: str) -> Dict[str, str]:
         """
