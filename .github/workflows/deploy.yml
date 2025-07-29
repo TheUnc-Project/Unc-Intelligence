@@ -121,6 +121,7 @@ jobs:
           Group=ubuntu
           WorkingDirectory=/opt/unc-intelligence
           Environment="PATH=/opt/unc-intelligence/venv/bin"
+          Environment="PYTHONPATH=/opt/unc-intelligence"
           ExecStart=/opt/unc-intelligence/venv/bin/uvicorn app:app \
             --host 0.0.0.0 \
             --port 8000 \
@@ -214,6 +215,16 @@ jobs:
           sudo systemctl daemon-reload
           sudo systemctl enable unc-intelligence
           sudo systemctl restart unc-intelligence
+
+          # Verify service is running
+          echo "Waiting for service to start..."
+          sleep 5  # Give it a moment to start
+          if ! sudo systemctl is-active --quiet unc-intelligence; then
+            echo "Service failed to start. Checking logs..."
+            sudo journalctl -u unc-intelligence -n 50 --no-pager
+            exit 1
+          fi
+          echo "Service started successfully"
 
           sudo systemctl enable certbot.timer
           sudo systemctl start certbot.timer
