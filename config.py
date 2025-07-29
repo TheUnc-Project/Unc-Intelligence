@@ -31,9 +31,8 @@ def get_aws_secrets():
 
         # Get all secrets
         aws_config = {
-            "SECRET_KEY": get_secret("SECRET_KEY"),
-            "DATABASE_URL": get_secret("DATABASE_URL"),
-            "NEW_NAME": get_secret("NEW_NAME"),
+            "OPENAI_API_KEY": get_secret("OPENAI_API_KEY"),
+            "INTELLIGENCE_API_SCERET": get_secret("INTELLIGENCE_API_SCERET"),
             "TWILIO_ACCOUNT_SID": get_secret("TWILIO_ACCOUNT_SID"),
             "TWILIO_AUTH_TOKEN": get_secret("TWILIO_AUTH_TOKEN"),
             "TWILIO_WHATSAPP_FROM": get_secret("TWILIO_WHATSAPP_FROM"),
@@ -50,9 +49,8 @@ def get_config():
     """Get configuration from environment variables or AWS Secrets Manager.
     Falls back to environment variables if AWS Secrets Manager fails."""
     config = {
-        "SECRET_KEY": os.getenv("SECRET_KEY"),
-        "DATABASE_URL": os.getenv("DATABASE_URL"),
-        "NEW_NAME": os.getenv("NEW_NAME"),
+        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
+        "INTELLIGENCE_API_SECRET": os.getenv("INTELLIGENCE_API_SECRET"),
         "TWILIO_ACCOUNT_SID": os.getenv("TWILIO_ACCOUNT_SID"),
         "TWILIO_AUTH_TOKEN": os.getenv("TWILIO_AUTH_TOKEN"),
         "TWILIO_WHATSAPP_FROM": os.getenv("TWILIO_WHATSAPP_FROM"),
