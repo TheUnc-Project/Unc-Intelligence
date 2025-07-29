@@ -18,7 +18,7 @@ async def reply_user(request: ReplyRequest):
     try:
         logging.info(f"Received request to reply to user {request.sender_id}")
         chat_service = router.services["chat_service"]
-        chat_service.reply_user(request.sender_id, request.message)
+        await chat_service.reply_user(request.sender_id, request.message)
 
         return {"message": "Reply sent successfully."}
     except Exception as e:
