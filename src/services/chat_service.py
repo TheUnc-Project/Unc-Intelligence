@@ -47,7 +47,7 @@ class ChatService:
         self, from_number: str, to_number: str, reply_message: str
     ):
         """Send WhatsApp message using Twilio in a separate thread."""
-        
+
         loop = asyncio.get_event_loop()
         task = await loop.run_in_executor(
             thread_pool,
@@ -55,7 +55,7 @@ class ChatService:
                 from_=from_number, body=reply_message, to=to_number
             ),
         )
-        
+
         logger.info(
             "WhatsApp message sent",
             from_number=from_number,
@@ -70,7 +70,6 @@ class ChatService:
         return await loop.run_in_executor(
             thread_pool, lambda: chat_table.put_item(Item=message_data)
         )
-        
 
     def mark_session_as_completed(self, session_id: str):
         """
@@ -218,9 +217,10 @@ class ChatService:
         if not conversation:
             conversation = {"messages": []}
 
-        reply, is_feedback_session_complete = await self.llm.analyze_conversation(
-            messages=conversation["messages"]
-        )
+        result = await self.llm.analyze_conversation(messages=conversation["messages"])
+
+        reply = result.get("reply", "")
+        is_feedback_session_complete = result.get("is_feedback_session_complete", False)
 
         if is_feedback_session_complete:
             self.mark_session_as_completed(conversation["session_id"])

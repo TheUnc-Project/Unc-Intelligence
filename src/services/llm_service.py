@@ -61,6 +61,7 @@ Field Rules:
 
 Additional Rules:
 - If the product name is missing, reply must prompt for the product name.
+- For the first message, avoid salutations and greetings but politely ask the user to start by providing the product name.
 - If feedback is missing, reply must request the user's feedback.
 - Only prompt for media if both product name and feedback are already present.
 - Do not thank the user until all required information is complete.
