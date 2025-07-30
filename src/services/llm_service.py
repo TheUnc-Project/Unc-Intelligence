@@ -179,6 +179,7 @@ Your task is to analyze the entire conversation and return a single JSON object 
                 result["user_limited_until"] = (
                     datetime.datetime.now() + datetime.timedelta(minutes=2)
                 ).isoformat()
+                result["reopen_session"] = True
 
                 return result
 

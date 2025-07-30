@@ -71,9 +71,7 @@ class ChatService:
             thread_pool, lambda: chat_table.put_item(Item=message_data)
         )
 
-    def mark_session_as_limited(
-        self, session_id: str, user_limited_until: str
-    ):
+    def mark_session_as_limited(self, session_id: str, user_limited_until: str):
         """
         Mark a user's session as limited in DynamoDB.
         """
@@ -116,7 +114,7 @@ class ChatService:
                     }
                 )
                 session_id = new_session_id
-                return
+                return new_session_id
 
             session_table.update_item(
                 Key={"session_id": session_id},
@@ -135,6 +133,7 @@ class ChatService:
                 "Session marked as completed",
                 session_id=session_id,
             )
+            return session_id
 
         except Exception as e:
             logger.error(
@@ -261,9 +260,15 @@ class ChatService:
         is_feedback_session_complete = result.get("is_feedback_session_complete", False)
         should_persist_reply = result.get("should_persist_reply", True)
         user_limited_until = result.get("user_limited_until", None)
+        reopen_session = result.get("reopen_session", False)
 
         if is_feedback_session_complete:
             self.mark_session_as_completed(sender_id, conversation["session_id"])
+
+        if reopen_session:
+            session_id = self.mark_session_as_completed(
+                sender_id, conversation["session_id"], True
+            )
 
         if user_limited_until:
             self.mark_session_as_limited(session_id, user_limited_until)
