@@ -72,6 +72,7 @@ Your task is to analyze the entire conversation and return a single JSON object 
 - is_immoral_conversation: true if the user uses language or ideas that are morally questionable (e.g. hate speech, unethical behavior).
 - is_too_short: true if the user's latest inbound text message contains fewer than 100 characters (excluding whitespace).
 - is_irrelevant: true if the user's message is clearly unrelated to product feedback or support (e.g., “I am Jesus”).
+- reply_level: 0 if asking for product name, 1 if asking for feedback, 2 if asking for media, 3 if otherwise
 
 ### Additional Instructions:
 
@@ -183,9 +184,14 @@ Your task is to analyze the entire conversation and return a single JSON object 
 
                 return result
 
-            if result.get("is_too_short", False):
+            if (
+                result.get("is_too_short", False)
+                and int(result.get("reply_level", 0)) == 1
+            ):
                 result["should_persist_reply"] = False
-                result["reply"] = "Your message is too short."
+                result["reply"] = (
+                    "Your message is too short. Please provide more context."
+                )
                 return result
 
             return result

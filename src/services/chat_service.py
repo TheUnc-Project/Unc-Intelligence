@@ -296,6 +296,7 @@ class ChatService:
                 reply_message,
                 session_id,
                 should_persist_reply,
+                reply_level,
             ) = await self.get_reply_message(sender_id)
 
             # Format WhatsApp numbers
@@ -321,7 +322,12 @@ class ChatService:
                 "chat_type": "outbound",
                 "session_id": session_id,
                 "created_at": timestamp,
-                "content": {"text": reply_message, "media_count": 0, "segments": 1},
+                "content": {
+                    "text": reply_message,
+                    "media_count": 0,
+                    "segments": 1,
+                    "reply_level": reply_level,
+                },
                 "metadata": {"message_id": message_id, "status": "sent"},
             }
 
